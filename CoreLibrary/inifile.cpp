@@ -1,10 +1,14 @@
 #include "inifile.h"
+#include "debug.h"
+
+#include "debug.h"
 
 #include <fstream>
 #include <algorithm>
 #include <iostream>
 #include <string>
 #include <stdexcept>
+#include <wordexp.h>
 
 static inline std::string trim(std::string string)
 {
@@ -13,13 +17,29 @@ static inline std::string trim(std::string string)
     return string;
 }
 
+static inline std::string string_replace(std::string haystack, std::string needle, std::string new_value)
+{
+    for (size_t index = 0;; index += new_value.length()) {
+        index = haystack.find(needle, index);
+        if (index == std::string::npos) {
+            break;
+        }
+        haystack.erase(index, needle.length());
+        haystack.insert(index, new_value);
+    }
+    return haystack;
+}
+
 bool IniFile::readFile(std::string filename)
 {
     std::ifstream file;
-    file.open(filename);
+    wordexp_t exp_res;
+    wordexp(filename.c_str(), &exp_res, 0);
+    
+    file.open(exp_res.we_wordv[0]);
 
     if (!file.is_open()) {
-        std::cout << "unable to open file\n";
+        debug("inifile") << "unable to open file" << filename;
         return 1;
     }
 
@@ -40,7 +60,7 @@ bool IniFile::readFile(std::string filename)
         if (line[0] == '[') {
             size_t end = line.find(']');
             if (end == std::string::npos) {
-                std::cout << "invalid file, unclosed group at line " << linenum << std::endl;
+                debug("inifile") << "invalid file, unclosed group at line " << linenum;
                 return false;
             }
             group = trim(line.substr(1, end - 1));
@@ -49,10 +69,10 @@ bool IniFile::readFile(std::string filename)
 
         size_t nameEnd = line.find('=');
         if (nameEnd == std::string::npos) {
-            std::cerr << "invalid file, missing = at line " << linenum << std::endl;
+            debug("inifile") << "invalid file, missing = at line " << linenum;
             return false;
         }
-        std::string name = trim(line.substr(0, nameEnd));
+        std::string name = trim(string_replace(line.substr(0, nameEnd), "%20", " "));
         std::string value = trim(line.substr(nameEnd + 1));
         if (name == "" || value == "") continue;
         m_values[group][name] = value;
